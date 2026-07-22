@@ -8,6 +8,16 @@ A hook that registers a [WebMCP](https://github.com/webmachinelearning/webmcp) t
 
 ---
 
+## Install
+
+```bash
+npm install use-webmcp-tool
+```
+
+Requires React 18+ as a peer dependency. Ships as ESM with TypeScript types included — no runtime dependencies.
+
+---
+
 ## What it does
 
 WebMCP lets a page expose JavaScript functions as "tools" that an AI agent (browser-built-in, iframe-hosted, or extension) can discover and call. The site author can expose functionality, and the agent uses this instead of scraping the DOM, a11y tree, or using screenshots.
@@ -40,7 +50,7 @@ controller.abort();
 `useWebMCP` wraps that imperative, lifecycle-bound API in the declarative, lifecycle-managed model React developers already use for everything else:
 
 ```jsx
-import { useWebMCP } from "@uidotdev/usehooks";
+import { useWebMCP } from "use-webmcp-tool";
 
 function TodoTools({ addTodo }) {
   const { supported, registered } = useWebMCP({

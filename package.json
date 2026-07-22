@@ -1,9 +1,48 @@
 {
-  "name": "usehooks-usewebmcp-proposal",
-  "private": true,
+  "name": "use-webmcp-tool",
+  "version": "0.1.0",
+  "description": "React hook for registering WebMCP tools (document.modelContext) with lifecycle-managed registration and MCP result normalization.",
   "type": "module",
+  "main": "./useWebMCP.js",
+  "module": "./useWebMCP.js",
+  "types": "./useWebMCP.d.ts",
+  "exports": {
+    ".": {
+      "types": "./useWebMCP.d.ts",
+      "default": "./useWebMCP.js"
+    }
+  },
+  "files": [
+    "useWebMCP.js",
+    "useWebMCP.d.ts"
+  ],
+  "sideEffects": false,
   "scripts": {
     "test": "vitest run"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GoogleChromeLabs/use-webmcp-tool.git"
+  },
+  "homepage": "https://github.com/GoogleChromeLabs/use-webmcp-tool#readme",
+  "bugs": {
+    "url": "https://github.com/GoogleChromeLabs/use-webmcp-tool/issues"
+  },
+  "keywords": [
+    "webmcp",
+    "mcp",
+    "react",
+    "react-hook",
+    "hooks",
+    "model-context",
+    "modelcontext",
+    "ai",
+    "agent"
+  ],
+  "author": "Sarah Drasner",
+  "license": "Apache-2.0",
+  "peerDependencies": {
+    "react": ">=18"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.0",
