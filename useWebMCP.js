@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import * as React from "react";
 
 // Stringify for error reporting without ever throwing itself
