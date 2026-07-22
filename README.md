@@ -85,6 +85,7 @@ const { supported, registered, error } = useWebMCP({
   name,           // string — tool identifier (required)
   description,    // string — natural-language description for the agent (required)
   inputSchema,    // JSON Schema object describing args (optional)
+  annotations,    // ToolAnnotations object with readOnlyHint/untrustedContentHint (optional)
   execute,        // (args) => result | Promise<result> (required)
   enabled = true, // boolean — register only while true
   formatOutput,   // (result, args) => any — optional shaper before MCP normalization

@@ -59,6 +59,18 @@ describe("registration lifecycle", () => {
     expect(tools.size).toBe(0);
   });
 
+  it("passes annotations through to registerTool", () => {
+    const { registerTool } = installFakeModelContext();
+    const annotations = { readOnlyHint: true, untrustedContentHint: false };
+    renderHook(() =>
+      useWebMCP({ ...baseOptions, annotations, execute: () => "ok" })
+    );
+
+    expect(registerTool).toHaveBeenCalledTimes(1);
+    const [tool] = registerTool.mock.calls[0];
+    expect(tool.annotations).toEqual(annotations);
+  });
+
   it("reports supported: false when document.modelContext is absent", () => {
     const { result } = renderHook(() =>
       useWebMCP({ ...baseOptions, execute: () => "ok" })
@@ -186,6 +198,31 @@ describe("re-registration identity", () => {
 
     rerender({ inputSchema: schema() });
     expect(registerTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-register for a new annotations object with identical content", () => {
+    const { registerTool } = installFakeModelContext();
+    const annots = () => ({ readOnlyHint: true });
+    const { rerender } = renderHook(
+      ({ annotations }) =>
+        useWebMCP({ ...baseOptions, annotations, execute: () => "ok" }),
+      { initialProps: { annotations: annots() } }
+    );
+
+    rerender({ annotations: annots() });
+    expect(registerTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-registers when annotations change", () => {
+    const { registerTool } = installFakeModelContext();
+    const { rerender } = renderHook(
+      ({ annotations }) =>
+        useWebMCP({ ...baseOptions, annotations, execute: () => "ok" }),
+      { initialProps: { annotations: { readOnlyHint: true } } }
+    );
+
+    rerender({ annotations: { readOnlyHint: false } });
+    expect(registerTool).toHaveBeenCalledTimes(2);
   });
 
   it("re-registers when the tool's discoverable identity changes", () => {
