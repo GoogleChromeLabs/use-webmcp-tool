@@ -1,0 +1,162 @@
+import * as React from "react";
+
+// Stringify for error reporting without ever throwing itself
+// (JSON.stringify throws on circular references and BigInt).
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+// Normalizes whatever `execute` returns into an MCP tool result so callers can
+// return a plain string/object and still hand the agent a valid response.
+function toToolResponse(value) {
+  // Already a well-formed MCP tool result — pass it through untouched.
+  if (value && typeof value === "object" && Array.isArray(value.content)) {
+    return value;
+  }
+
+  // `execute` returned nothing — report a successful, empty result.
+  if (value === undefined || value === null) {
+    return { content: [] };
+  }
+
+  // Strings map directly to a single text block.
+  if (typeof value === "string") {
+    return { content: [{ type: "text", text: value }] };
+  }
+
+  // Anything else (objects, arrays, numbers) is serialized to JSON text.
+  return { content: [{ type: "text", text: JSON.stringify(value) }] };
+}
+
+// Every failure becomes an explicit `isError` result, whatever was thrown —
+// a thrown string or plain object must not read as success to the agent.
+function toErrorResponse(error) {
+  const text =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : safeStringify(error);
+  return { content: [{ type: "text", text }], isError: true };
+}
+
+export function useWebMCP({
+  name,
+  description,
+  inputSchema,
+  execute,
+  enabled = true,
+  formatOutput,
+  onError,
+}) {
+  const [state, setState] = React.useState({
+    supported: false,
+    registered: false,
+    error: null,
+  });
+
+  // Keep the latest callbacks in refs so a changing `execute` closure (which
+  // captures props/state) does not force us to unregister and re-register the
+  // tool on every render.
+  const executeRef = React.useRef(execute);
+  const formatOutputRef = React.useRef(formatOutput);
+  const onErrorRef = React.useRef(onError);
+
+  React.useEffect(() => {
+    executeRef.current = execute;
+    formatOutputRef.current = formatOutput;
+    onErrorRef.current = onError;
+  });
+
+  // Only the parts an agent discovers should trigger re-registration. The
+  // schema is serialized so an inline object literal doesn't churn every
+  // render. (Key-order sensitive: `{a, b}` vs `{b, a}` re-registers even
+  // though the schemas are semantically identical — pass a stable literal.)
+  const schemaKey = inputSchema ? JSON.stringify(inputSchema) : "";
+
+  // `document.modelContext` is typically injected by a browser extension,
+  // whose content script may run after this component mounts. Bumped when a
+  // late injection is detected so the registration effect re-runs.
+  const [detectTick, redetect] = React.useReducer((n) => n + 1, 0);
+
+  React.useEffect(() => {
+    const supported =
+      typeof document !== "undefined" && Boolean(document.modelContext);
+
+    if (!supported) {
+      setState({ supported: false, registered: false, error: null });
+
+      // Re-check briefly for a late-injected API instead of reporting
+      // `supported: false` forever. Gives up after 10 seconds.
+      if (typeof document === "undefined") return;
+      let attempts = 0;
+      const timer = setInterval(() => {
+        if (document.modelContext) {
+          clearInterval(timer);
+          redetect();
+        } else if (++attempts >= 20) {
+          clearInterval(timer);
+        }
+      }, 500);
+      return () => clearInterval(timer);
+    }
+
+    if (!enabled) {
+      setState({ supported: true, registered: false, error: null });
+      return;
+    }
+
+    const controller = new AbortController();
+
+    try {
+      document.modelContext.registerTool(
+        {
+          name,
+          description,
+          inputSchema,
+          async execute(args) {
+            try {
+              const result = await executeRef.current(args);
+              const format = formatOutputRef.current;
+              const shaped = format ? format(result, args) : result;
+              // A returned Error gets the same treatment as a thrown one:
+              // `onError`, then an `isError` result.
+              if (shaped instanceof Error) throw shaped;
+              return toToolResponse(shaped);
+            } catch (error) {
+              if (onErrorRef.current) {
+                onErrorRef.current(error);
+              }
+              return toErrorResponse(error);
+            }
+          },
+        },
+        { signal: controller.signal }
+      );
+
+      setState({ supported: true, registered: true, error: null });
+    } catch (error) {
+      // e.g. NotAllowedError when the `tools` permissions policy is disabled.
+      setState({
+        supported: true,
+        registered: false,
+        error: error instanceof Error ? error : new Error(safeStringify(error)),
+      });
+    }
+
+    // Aborting the signal is how WebMCP unregisters a tool, so this runs on
+    // unmount and before every re-registration.
+    return () => {
+      controller.abort();
+    };
+    // `schemaKey` stands in for `inputSchema` (content comparison, above);
+    // `execute`/`formatOutput`/`onError` are read through refs by design.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, description, schemaKey, enabled, detectTick]);
+
+  return state;
+}

@@ -1,0 +1,203 @@
+---
+name: useWebMCP
+rank: 52 # TODO: maintainers rank by popularity
+tagline: Expose a component action as a WebMCP tool for AI agents with useWebMCP.
+sandboxId: usewebmcp-DRAFT # TODO: replace with the generated CodeSandbox id
+previewHeight: 420px
+relatedHooks:
+  - usescript
+  - useeventlistener
+---
+
+import CodePreview from "../../components/CodePreview.astro";
+import HookDescription from "../../components/HookDescription.astro";
+import StaticCodeContainer from "../../components/StaticCodeContainer.astro";
+
+<HookDescription name={frontmatter.name}>
+  The useWebMCP hook is useful for exposing a component's functionality to AI
+  agents as a <a href="https://github.com/webmachinelearning/webmcp">WebMCP</a>{" "}
+  "tool". WebMCP's imperative API (`document.modelContext.registerTool`) is
+  lifecycle-bound — a tool should exist only while the UI that backs it is on
+  screen — which maps naturally onto a React component. The hook registers your
+  tool on mount and unregisters it on unmount, keeps the agent calling your
+  latest `execute` callback (no stale closures, no re-registration churn),
+  feature-detects so it's a safe no-op during SSR and in browsers without
+  WebMCP (briefly re-checking after mount, since extensions often inject the
+  API late), and normalizes whatever you return into a valid tool response —
+  turning anything thrown into an `{ isError: true }` result along the way.
+</HookDescription>
+
+<div class="reference">
+  ### Parameters
+
+  `useWebMCP` accepts a single configuration object:
+
+  <div class="table-container">
+  | Name         | Type     | Description |
+  | ------------ | -------- | ----------- |
+  | name         | string   | The tool's identifier, e.g. `"add-todo"`. |
+  | description  | string   | A natural-language description the agent uses to decide when to call the tool. |
+  | inputSchema  | object   | Optional JSON Schema describing the tool's arguments (`type`, `properties`, `required`). |
+  | execute      | function | `(args) => result \| Promise<result>`. Runs your client-side logic and returns a result for the agent. |
+  | enabled      | boolean  | Optional, defaults to `true`. The tool is registered only while `true` — handy for auth-gated or state-dependent tools. |
+  | formatOutput | function | Optional `(result, args) => any` to shape the value before it's normalized into a tool response. |
+  | onError      | function | Optional `(error) => void` side effect invoked when `execute` throws or returns an `Error` (before the error is returned as an `isError` result). |
+  </div>
+
+  ### Return Values
+
+  `useWebMCP` returns an object with the following properties:
+
+  <div class="table-container">
+  | Name       | Type            | Description |
+  | ---------- | --------------- | ----------- |
+  | supported  | boolean         | Whether `document.modelContext` exists in this environment. If absent at mount, the hook re-checks briefly (extensions may inject the API late) and flips this to `true` when it appears. |
+  | registered | boolean         | Whether the tool is currently registered with the browser. |
+  | error      | Error \| null   | A registration error, e.g. a `NotAllowedError` when the `tools` permissions policy is disabled. |
+  </div>
+</div>
+
+<CodePreview
+  sandboxId={frontmatter.sandboxId}
+  previewHeight={frontmatter.previewHeight}
+/>
+
+<StaticCodeContainer>
+
+```jsx
+import * as React from "react";
+import { useWebMCP } from "@uidotdev/usehooks";
+import { installModelContextShim } from "./modelContextShim";
+
+// Lets the preview run without a real WebMCP agent (see modelContextShim.js).
+installModelContextShim();
+
+let nextId = 1;
+
+export default function App() {
+  // Lazy initializer: the array (and nextId++) must only evaluate once, not on
+  // every render.
+  const [todos, setTodos] = React.useState(() => [
+    { id: nextId++, text: "Try the agent console below 👇" },
+  ]);
+
+  const addTodo = React.useCallback((text) => {
+    const todo = { id: nextId++, text };
+    setTodos((prev) => [...prev, todo]);
+    return todo;
+  }, []);
+
+  // The whole integration: this component owns the `add-todo` tool. It registers
+  // on mount and unregisters on unmount. `execute` closes over `addTodo`, which
+  // is a stable useCallback that reads todos via a functional update — so the
+  // agent always reaches live state. (Handlers that capture render state get the
+  // last *committed* render's value — see the proposal for details.)
+  const { supported, registered } = useWebMCP({
+    name: "add-todo",
+    description: "Add a new item to the user's active todo list",
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text content of the todo item" },
+      },
+      required: ["text"],
+    },
+    execute({ text }) {
+      const todo = addTodo(text);
+      // Return a plain string — the hook wraps it as { content: [{ type, text }] }.
+      return `Added todo #${todo.id}: "${todo.text}"`;
+    },
+  });
+
+  return (
+    <section>
+      <h1>useWebMCP</h1>
+
+      <p>
+        <span className={registered ? "ready" : ""} />
+        <label>
+          {!supported
+            ? "document.modelContext unavailable"
+            : registered
+            ? "🤖 Tool “add-todo” registered — an agent can call it"
+            : "Registering…"}
+        </label>
+      </p>
+
+      <article>
+        <label>Todos (shared by the human UI and the agent)</label>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const value = e.target.elements.todo.value.trim();
+            if (value) addTodo(value);
+            e.target.reset();
+          }}
+        >
+          <input name="todo" placeholder="Add a todo yourself…" />
+          <button className="link">Add</button>
+        </form>
+        <ul>
+          {todos.map((todo) => (
+            <li key={todo.id}>{todo.text}</li>
+          ))}
+        </ul>
+      </article>
+
+      <AgentConsole />
+    </section>
+  );
+}
+
+// Stands in for a browser-integrated agent: it discovers the page's tools and
+// invokes one through the very same document.modelContext API an agent uses.
+function AgentConsole() {
+  const [text, setText] = React.useState("Buy oat milk");
+  const [response, setResponse] = React.useState(null);
+
+  const sendAsAgent = async () => {
+    try {
+      // Both Chrome's WebMCP extension and the demo shim share this surface:
+      // getTools() is async, and executeTool takes the tool object (not its
+      // name) plus the arguments as a JSON string, resolving with the MCP
+      // response serialized as a JSON string.
+      const tools = await document.modelContext.getTools();
+      const tool = tools.find((t) => t.name === "add-todo");
+      if (!tool) throw new Error('Tool "add-todo" is not registered');
+      const raw = await document.modelContext.executeTool(
+        tool,
+        JSON.stringify({ text })
+      );
+      setResponse(typeof raw === "string" ? JSON.parse(raw) : raw);
+    } catch (error) {
+      setResponse({
+        content: [{ type: "text", text: String(error) }],
+        isError: true,
+      });
+    }
+  };
+
+  return (
+    <article>
+      <label>Agent console</label>
+      <pre>
+        <code>add-todo({JSON.stringify({ text })})</code>
+      </pre>
+      <input value={text} onChange={(e) => setText(e.target.value)} />
+      <button className="link" onClick={sendAsAgent}>
+        Send as agent
+      </button>
+      {response && (
+        <dialog open>
+          <h4>Tool response</h4>
+          <pre>
+            <code>{JSON.stringify(response, null, 2)}</code>
+          </pre>
+        </dialog>
+      )}
+    </article>
+  );
+}
+```
+
+</StaticCodeContainer>
