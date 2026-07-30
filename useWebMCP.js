@@ -64,6 +64,7 @@ export function useWebMCP({
   name,
   description,
   inputSchema,
+  annotations,
   execute,
   enabled = true,
   formatOutput,
@@ -89,10 +90,11 @@ export function useWebMCP({
   });
 
   // Only the parts an agent discovers should trigger re-registration. The
-  // schema is serialized so an inline object literal doesn't churn every
-  // render. (Key-order sensitive: `{a, b}` vs `{b, a}` re-registers even
-  // though the schemas are semantically identical — pass a stable literal.)
+  // schema and annotations are serialized so inline object literals don't
+  // churn every render. (Key-order sensitive: `{a, b}` vs `{b, a}` re-registers
+  // even though the objects are semantically identical — pass a stable literal.)
   const schemaKey = inputSchema ? JSON.stringify(inputSchema) : "";
+  const annotationsKey = annotations ? JSON.stringify(annotations) : "";
 
   // `document.modelContext` is typically injected by a browser extension,
   // whose content script may run after this component mounts. Bumped when a
@@ -134,6 +136,7 @@ export function useWebMCP({
           name,
           description,
           inputSchema,
+          annotations,
           async execute(args) {
             try {
               const result = await executeRef.current(args);
@@ -169,10 +172,11 @@ export function useWebMCP({
     return () => {
       controller.abort();
     };
-    // `schemaKey` stands in for `inputSchema` (content comparison, above);
-    // `execute`/`formatOutput`/`onError` are read through refs by design.
+    // `schemaKey` and `annotationsKey` stand in for `inputSchema` and
+    // `annotations` (content comparison, above); `execute`/`formatOutput`/`onError`
+    // are read through refs by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, schemaKey, enabled, detectTick]);
+  }, [name, description, schemaKey, annotationsKey, enabled, detectTick]);
 
   return state;
 }

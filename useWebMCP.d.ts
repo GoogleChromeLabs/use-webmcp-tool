@@ -19,10 +19,16 @@ export type WebMCPToolResponse = {
   isError?: boolean;
 };
 
+export type ToolAnnotations = {
+  readOnlyHint?: boolean;
+  untrustedContentHint?: boolean;
+};
+
 export type WebMCPOptions<Args, Result> = {
   name: string;
   description: string;
   inputSchema?: object;
+  annotations?: ToolAnnotations;
   execute: (args: Args) => Result | Promise<Result>;
   enabled?: boolean;
   formatOutput?: (result: Result, args: Args) => unknown;
