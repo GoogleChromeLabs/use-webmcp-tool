@@ -52,7 +52,8 @@ function toToolResponse(value) {
 // a thrown string or plain object must not read as success to the agent.
 function toErrorResponse(error) {
   const text =
-    error instanceof Error
+    error instanceof Error ||
+    (error && typeof error === "object" && typeof error.message === "string")
       ? error.message
       : typeof error === "string"
         ? error
@@ -137,9 +138,9 @@ export function useWebMCP({
           description,
           inputSchema,
           annotations,
-          async execute(args) {
+          async execute(args, options) {
             try {
-              const result = await executeRef.current(args);
+              const result = await executeRef.current(args, options);
               const format = formatOutputRef.current;
               const shaped = format ? format(result, args) : result;
               // A returned Error gets the same treatment as a thrown one:

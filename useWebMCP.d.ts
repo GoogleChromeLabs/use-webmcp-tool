@@ -29,7 +29,7 @@ export type WebMCPOptions<Args, Result> = {
   description: string;
   inputSchema?: object;
   annotations?: ToolAnnotations;
-  execute: (args: Args) => Result | Promise<Result>;
+  execute: (args: Args, options: { signal: AbortSignal }) => Result | Promise<Result>;
   enabled?: boolean;
   formatOutput?: (result: Result, args: Args) => unknown;
   onError?: (error: unknown) => void;

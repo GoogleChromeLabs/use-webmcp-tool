@@ -372,3 +372,115 @@ describe("error normalization", () => {
     expect(response.content[0].text).toMatch(/circular/i);
   });
 });
+
+describe("execute options and signal", () => {
+  it("forwards args and options (including signal) to execute", async () => {
+    const { tools } = installFakeModelContext();
+    const executeSpy = vi.fn((args, options) => `done: ${args.text}`);
+    renderHook(() => useWebMCP({ ...baseOptions, execute: executeSpy }));
+
+    const controller = new AbortController();
+    const response = await tools
+      .get("add-todo")
+      .execute({ text: "buy milk" }, { signal: controller.signal });
+
+    expect(executeSpy).toHaveBeenCalledWith(
+      { text: "buy milk" },
+      { signal: controller.signal }
+    );
+    expect(response).toEqual({
+      content: [{ type: "text", text: "done: buy milk" }],
+    });
+  });
+
+  it("works when execute is called without options", async () => {
+    const { tools } = installFakeModelContext();
+    const executeSpy = vi.fn((args) => "ok");
+    renderHook(() => useWebMCP({ ...baseOptions, execute: executeSpy }));
+
+    const response = await tools.get("add-todo").execute({ text: "buy milk" });
+    expect(executeSpy).toHaveBeenCalledWith({ text: "buy milk" }, undefined);
+    expect(response).toEqual({
+      content: [{ type: "text", text: "ok" }],
+    });
+  });
+
+  it("allows execute to react to signal abortion", async () => {
+    const { tools } = installFakeModelContext();
+    const controller = new AbortController();
+
+    const execute = vi.fn(async (args, { signal }) => {
+      if (signal.aborted) {
+        throw new Error("aborted before start");
+      }
+      return new Promise((resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          reject(new Error("aborted during execution"));
+        });
+      });
+    });
+
+    renderHook(() => useWebMCP({ ...baseOptions, execute }));
+
+    const promise = tools
+      .get("add-todo")
+      .execute({ text: "buy milk" }, { signal: controller.signal });
+
+    controller.abort();
+    const response = await promise;
+
+    expect(response).toEqual({
+      content: [{ type: "text", text: "aborted during execution" }],
+      isError: true,
+    });
+  });
+
+  it("handles AbortError thrown via signal.throwIfAborted()", async () => {
+    const { tools } = installFakeModelContext();
+    const onError = vi.fn();
+    const controller = new AbortController();
+    controller.abort();
+
+    const execute = vi.fn((args, { signal }) => {
+      signal.throwIfAborted();
+      return "never reached";
+    });
+
+    renderHook(() => useWebMCP({ ...baseOptions, execute, onError }));
+
+    const response = await tools
+      .get("add-todo")
+      .execute({}, { signal: controller.signal });
+
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toMatch(/aborted/i);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0][0].name).toBe("AbortError");
+  });
+
+  it("forwards options to the updated execute closure after re-render", async () => {
+    const { tools } = installFakeModelContext();
+    const firstExecute = vi.fn(() => "first");
+    const secondExecute = vi.fn((args, options) => `second: ${args.text}`);
+    const { rerender } = renderHook(
+      ({ execute }) => useWebMCP({ ...baseOptions, execute }),
+      { initialProps: { execute: firstExecute } }
+    );
+
+    rerender({ execute: secondExecute });
+
+    const controller = new AbortController();
+    const response = await tools
+      .get("add-todo")
+      .execute({ text: "buy milk" }, { signal: controller.signal });
+
+    expect(firstExecute).not.toHaveBeenCalled();
+    expect(secondExecute).toHaveBeenCalledWith(
+      { text: "buy milk" },
+      { signal: controller.signal }
+    );
+    expect(response).toEqual({
+      content: [{ type: "text", text: "second: buy milk" }],
+    });
+  });
+});
