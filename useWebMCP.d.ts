@@ -26,6 +26,7 @@ export type ToolAnnotations = {
 
 export type WebMCPOptions<Args, Result> = {
   name: string;
+  title?: string;
   description: string;
   inputSchema?: object;
   annotations?: ToolAnnotations;

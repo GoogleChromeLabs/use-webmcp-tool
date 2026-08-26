@@ -62,6 +62,7 @@ function toErrorResponse(error) {
 
 export function useWebMCP({
   name,
+  title,
   description,
   inputSchema,
   annotations,
@@ -134,6 +135,7 @@ export function useWebMCP({
       document.modelContext.registerTool(
         {
           name,
+          title,
           description,
           inputSchema,
           annotations,
@@ -176,7 +178,7 @@ export function useWebMCP({
     // `annotations` (content comparison, above); `execute`/`formatOutput`/`onError`
     // are read through refs by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, schemaKey, annotationsKey, enabled, detectTick]);
+  }, [name, title, description, schemaKey, annotationsKey, enabled, detectTick]);
 
   return state;
 }
