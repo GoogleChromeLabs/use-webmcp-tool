@@ -60,41 +60,40 @@ function toErrorResponse(error) {
   return { content: [{ type: "text", text }], isError: true };
 }
 
-export function useWebMCP({
-  name,
-  description,
-  inputSchema,
-  annotations,
-  execute,
-  enabled = true,
-  formatOutput,
-  onError,
-}) {
+export function useWebMCP(options) {
+  return useWebMCPTools([options]);
+}
+
+export function useWebMCPTools(tools) {
   const [state, setState] = React.useState({
     supported: false,
     registered: false,
     error: null,
   });
 
-  // Keep the latest callbacks in refs so a changing `execute` closure (which
-  // captures props/state) does not force us to unregister and re-register the
-  // tool on every render.
-  const executeRef = React.useRef(execute);
-  const formatOutputRef = React.useRef(formatOutput);
-  const onErrorRef = React.useRef(onError);
+  // Keep the latest tool callbacks in a ref so changing closures (which capture
+  // props/state) do not force tools to unregister and re-register every render.
+  const toolsRef = React.useRef(tools);
 
   React.useEffect(() => {
-    executeRef.current = execute;
-    formatOutputRef.current = formatOutput;
-    onErrorRef.current = onError;
+    toolsRef.current = tools;
   });
 
-  // Only the parts an agent discovers should trigger re-registration. The
-  // schema and annotations are serialized so inline object literals don't
-  // churn every render. (Key-order sensitive: `{a, b}` vs `{b, a}` re-registers
-  // even though the objects are semantically identical — pass a stable literal.)
-  const schemaKey = inputSchema ? JSON.stringify(inputSchema) : "";
-  const annotationsKey = annotations ? JSON.stringify(annotations) : "";
+  // Only the parts an agent discovers should trigger re-registration. Schemas
+  // and annotations are serialized so inline object literals don't churn every
+  // render. (Key-order sensitive: `{a, b}` vs `{b, a}` re-registers even though
+  // the objects are semantically identical — pass stable literals.)
+  const registrationKey = JSON.stringify(
+    tools.map(
+      ({ name, description, inputSchema, annotations, enabled = true }) => ({
+        name,
+        description,
+        inputSchema,
+        annotations,
+        enabled,
+      })
+    )
+  );
 
   // `document.modelContext` is typically injected by a browser extension,
   // whose content script may run after this component mounts. Bumped when a
@@ -123,7 +122,11 @@ export function useWebMCP({
       return () => clearInterval(timer);
     }
 
-    if (!enabled) {
+    const enabledTools = toolsRef.current.filter(
+      ({ enabled = true }) => enabled
+    );
+
+    if (enabledTools.length === 0) {
       setState({ supported: true, registered: false, error: null });
       return;
     }
@@ -131,34 +134,54 @@ export function useWebMCP({
     const controller = new AbortController();
 
     try {
-      document.modelContext.registerTool(
-        {
-          name,
-          description,
-          inputSchema,
-          annotations,
-          async execute(args) {
-            try {
-              const result = await executeRef.current(args);
-              const format = formatOutputRef.current;
-              const shaped = format ? format(result, args) : result;
-              // A returned Error gets the same treatment as a thrown one:
-              // `onError`, then an `isError` result.
-              if (shaped instanceof Error) throw shaped;
-              return toToolResponse(shaped);
-            } catch (error) {
-              if (onErrorRef.current) {
-                onErrorRef.current(error);
+      const names = new Set();
+
+      for (const tool of enabledTools) {
+        const { name, description, inputSchema, annotations } = tool;
+
+        if (names.has(name)) {
+          throw new Error(`Duplicate WebMCP tool name: ${name}`);
+        }
+        names.add(name);
+
+        document.modelContext.registerTool(
+          {
+            name,
+            description,
+            inputSchema,
+            annotations,
+            async execute(args) {
+              // Look up the latest callbacks by name without changing the
+              // tool's registration identity.
+              const currentTool =
+                toolsRef.current.find((candidate) => candidate.name === name) ??
+                tool;
+
+              try {
+                const result = await currentTool.execute(args);
+                const format = currentTool.formatOutput;
+                const shaped = format ? format(result, args) : result;
+                // A returned Error gets the same treatment as a thrown one:
+                // `onError`, then an `isError` result.
+                if (shaped instanceof Error) throw shaped;
+                return toToolResponse(shaped);
+              } catch (error) {
+                if (currentTool.onError) {
+                  currentTool.onError(error);
+                }
+                return toErrorResponse(error);
               }
-              return toErrorResponse(error);
-            }
+            },
           },
-        },
-        { signal: controller.signal }
-      );
+          { signal: controller.signal }
+        );
+      }
 
       setState({ supported: true, registered: true, error: null });
     } catch (error) {
+      // Registration is atomic from the hook's perspective. If any tool fails,
+      // remove the tools that were already registered in this batch.
+      controller.abort();
       // e.g. NotAllowedError when the `tools` permissions policy is disabled.
       setState({
         supported: true,
@@ -168,15 +191,14 @@ export function useWebMCP({
     }
 
     // Aborting the signal is how WebMCP unregisters a tool, so this runs on
-    // unmount and before every re-registration.
+    // unmount and before every batch re-registration.
     return () => {
       controller.abort();
     };
-    // `schemaKey` and `annotationsKey` stand in for `inputSchema` and
-    // `annotations` (content comparison, above); `execute`/`formatOutput`/`onError`
-    // are read through refs by design.
+    // `registrationKey` captures discoverable metadata and `enabled` state by
+    // content; callback fields are read through `toolsRef` by design.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, description, schemaKey, annotationsKey, enabled, detectTick]);
+  }, [registrationKey, detectTick]);
 
   return state;
 }

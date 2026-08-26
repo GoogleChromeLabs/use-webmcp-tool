@@ -17,7 +17,7 @@
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useWebMCP } from "./useWebMCP.js";
+import { useWebMCP, useWebMCPTools } from "./useWebMCP.js";
 
 // Minimal fake of the provider side of document.modelContext: registerTool +
 // AbortSignal unregistration, mirroring both the explainer and Chrome's
@@ -177,6 +177,124 @@ describe("registration lifecycle", () => {
     expect(result.current.registered).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error.message).toContain("NotAllowedError-ish");
+  });
+});
+
+describe("multiple-tool registration", () => {
+  const multipleTools = (firstExecute = () => "added") => [
+    {
+      ...baseOptions,
+      execute: firstExecute,
+    },
+    {
+      name: "clear-todos",
+      description: "Clear all todos",
+      execute: () => "cleared",
+    },
+  ];
+
+  it("registers and unregisters a collection of tools as one lifecycle", () => {
+    const { tools, registerTool } = installFakeModelContext();
+    const { result, unmount } = renderHook(() =>
+      useWebMCPTools(multipleTools())
+    );
+
+    expect(result.current).toEqual({
+      supported: true,
+      registered: true,
+      error: null,
+    });
+    expect(registerTool).toHaveBeenCalledTimes(2);
+    expect([...tools.keys()]).toEqual(["add-todo", "clear-todos"]);
+
+    unmount();
+    expect(tools.size).toBe(0);
+  });
+
+  it("uses the latest callbacks without re-registering the collection", async () => {
+    const { tools, registerTool } = installFakeModelContext();
+    const { rerender } = renderHook(
+      ({ value }) => useWebMCPTools(multipleTools(() => value)),
+      { initialProps: { value: "first" } }
+    );
+
+    rerender({ value: "second" });
+    expect(registerTool).toHaveBeenCalledTimes(2);
+    await expect(tools.get("add-todo").execute({})).resolves.toEqual({
+      content: [{ type: "text", text: "second" }],
+    });
+  });
+
+  it("re-registers the collection when discoverable metadata changes", () => {
+    const { tools, registerTool } = installFakeModelContext();
+    const { rerender } = renderHook(
+      ({ description }) =>
+        useWebMCPTools([
+          { ...baseOptions, execute: () => "added" },
+          { name: "clear-todos", description, execute: () => "cleared" },
+        ]),
+      { initialProps: { description: "Clear all todos" } }
+    );
+
+    rerender({ description: "Remove every todo" });
+    expect(registerTool).toHaveBeenCalledTimes(4);
+    expect(tools.size).toBe(2);
+    expect(tools.get("clear-todos").description).toBe("Remove every todo");
+  });
+
+  it("skips disabled tools and reports false when all are disabled", () => {
+    const { tools } = installFakeModelContext();
+    const { result, rerender } = renderHook(
+      ({ firstEnabled }) =>
+        useWebMCPTools([
+          { ...baseOptions, enabled: firstEnabled, execute: () => "added" },
+          {
+            name: "clear-todos",
+            description: "Clear all todos",
+            enabled: false,
+            execute: () => "cleared",
+          },
+        ]),
+      { initialProps: { firstEnabled: true } }
+    );
+
+    expect(result.current.registered).toBe(true);
+    expect([...tools.keys()]).toEqual(["add-todo"]);
+
+    rerender({ firstEnabled: false });
+    expect(result.current.registered).toBe(false);
+    expect(tools.size).toBe(0);
+  });
+
+  it("rolls back earlier registrations when a later tool fails", () => {
+    const tools = new Map();
+    document.modelContext = {
+      registerTool(tool, options = {}) {
+        if (tool.name === "clear-todos") throw new Error("registration failed");
+        tools.set(tool.name, tool);
+        options.signal?.addEventListener("abort", () => tools.delete(tool.name));
+      },
+    };
+
+    const { result } = renderHook(() => useWebMCPTools(multipleTools()));
+
+    expect(result.current.registered).toBe(false);
+    expect(result.current.error).toEqual(new Error("registration failed"));
+    expect(tools.size).toBe(0);
+  });
+
+  it("rejects duplicate tool names before leaving a partial registration", () => {
+    const { tools } = installFakeModelContext();
+    const { result } = renderHook(() =>
+      useWebMCPTools([
+        { ...baseOptions, execute: () => "first" },
+        { ...baseOptions, execute: () => "second" },
+      ])
+    );
+
+    expect(result.current.registered).toBe(false);
+    expect(result.current.error.message).toContain("Duplicate WebMCP tool name");
+    expect(tools.size).toBe(0);
   });
 });
 

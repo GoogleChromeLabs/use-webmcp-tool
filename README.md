@@ -76,6 +76,42 @@ function TodoTools({ addTodo }) {
 
 The tool is registered when the component mounts and **unregistered automatically when it unmounts**. This is designed so that the set of tools an agent sees stays in lockstep with what is actually on screen.
 
+To register a collection of tools with one shared lifecycle, use the plural
+hook:
+
+```jsx
+import { useWebMCPTools } from "use-webmcp-tool";
+
+function TodoTools({ addTodo, clearTodos }) {
+  const { supported, registered, error } = useWebMCPTools([
+    {
+      name: "add-todo",
+      description: "Add a new item to the user's active todo list",
+      inputSchema: {
+        type: "object",
+        properties: { text: { type: "string" } },
+        required: ["text"],
+      },
+      execute: ({ text }) => addTodo(text),
+    },
+    {
+      name: "clear-todos",
+      description: "Remove every item from the user's active todo list",
+      execute: clearTodos,
+    },
+  ]);
+
+  if (!supported || error) return null;
+  return <p>{registered ? "🤖 Agent tools ready" : "…"}</p>;
+}
+```
+
+Each item accepts the same options as `useWebMCP`, including its own `enabled`
+flag. Tool names must be unique. The returned `registered` value is `true` when
+at least one tool is enabled and every enabled tool registered successfully. If
+any registration fails, the hook unregisters the rest of the collection and
+reports the error.
+
 ---
 
 ## API
@@ -114,6 +150,6 @@ const { supported, registered, error } = useWebMCP({
 
 ## Tests
 
-[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 21 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s. 
+[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s.
 
 Run with `npm install && npm test`.
