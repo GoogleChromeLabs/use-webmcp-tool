@@ -45,3 +45,7 @@ export function useWebMCP<
   Args = Record<string, unknown>,
   Result = unknown
 >(options: WebMCPOptions<Args, Result>): WebMCPState;
+
+export function useWebMCPTools(
+  tools: ReadonlyArray<WebMCPOptions<any, any>>
+): WebMCPState;
