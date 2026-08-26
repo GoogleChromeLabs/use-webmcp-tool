@@ -29,6 +29,7 @@ const controller = new AbortController();
 
 document.modelContext.registerTool({
   name: "add-todo",
+  title: "Add a todo item",
   description: "Add a new item to the user's active todo list",
   inputSchema: {
     type: "object",
@@ -55,6 +56,7 @@ import { useWebMCP } from "use-webmcp-tool";
 function TodoTools({ addTodo }) {
   const { supported, registered } = useWebMCP({
     name: "add-todo",
+    title: "Add a todo item",
     description: "Add a new item to the user's active todo list",
     inputSchema: {
       type: "object",
@@ -83,6 +85,7 @@ The tool is registered when the component mounts and **unregistered automaticall
 ```ts
 const { supported, registered, error } = useWebMCP({
   name,           // string — tool identifier (required)
+  title,          // string — human-readable tool label (optional)
   description,    // string — natural-language description for the agent (required)
   inputSchema,    // JSON Schema object describing args (optional)
   annotations,    // ToolAnnotations object with readOnlyHint/untrustedContentHint (optional)
@@ -114,6 +117,6 @@ const { supported, registered, error } = useWebMCP({
 
 ## Tests
 
-[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 21 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s. 
+[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s.
 
 Run with `npm install && npm test`.

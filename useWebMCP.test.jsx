@@ -82,6 +82,21 @@ describe("registration lifecycle", () => {
     expect(tool.annotations).toEqual(annotations);
   });
 
+  it("passes an optional title through to registerTool", () => {
+    const { registerTool } = installFakeModelContext();
+    renderHook(() =>
+      useWebMCP({
+        ...baseOptions,
+        title: "Add a todo item",
+        execute: () => "ok",
+      })
+    );
+
+    expect(registerTool).toHaveBeenCalledTimes(1);
+    const [tool] = registerTool.mock.calls[0];
+    expect(tool.title).toBe("Add a todo item");
+  });
+
   it("reports supported: false when document.modelContext is absent", () => {
     const { result } = renderHook(() =>
       useWebMCP({ ...baseOptions, execute: () => "ok" })
@@ -247,6 +262,19 @@ describe("re-registration identity", () => {
     expect(registerTool).toHaveBeenCalledTimes(2);
     expect(tools.has("add-todo")).toBe(false);
     expect(tools.has("add-item")).toBe(true);
+  });
+
+  it("re-registers when the tool's title changes", () => {
+    const { registerTool } = installFakeModelContext();
+    const { rerender } = renderHook(
+      ({ title }) =>
+        useWebMCP({ ...baseOptions, title, execute: () => "ok" }),
+      { initialProps: { title: "Add a todo" } }
+    );
+
+    rerender({ title: "Create a todo" });
+    expect(registerTool).toHaveBeenCalledTimes(2);
+    expect(registerTool.mock.calls[1][0].title).toBe("Create a todo");
   });
 });
 
