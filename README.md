@@ -86,7 +86,7 @@ const { supported, registered, error } = useWebMCP({
   description,    // string — natural-language description for the agent (required)
   inputSchema,    // JSON Schema object describing args (optional)
   annotations,    // ToolAnnotations object with readOnlyHint/untrustedContentHint (optional)
-  execute,        // (args) => result | Promise<result> (required)
+  execute,        // (args, { signal }) => result | Promise<result> (required)
   enabled = true, // boolean — register only while true
   formatOutput,   // (result, args) => any — optional shaper before MCP normalization
   onError,        // (error) => void — optional side-effect when execute throws
@@ -101,7 +101,11 @@ const { supported, registered, error } = useWebMCP({
 | `registered` | `boolean`        | The tool is currently registered with the browser.                   |
 | `error`      | `Error \| null`  | Registration error, e.g. `NotAllowedError` from a `tools` permissions policy. |
 
-**`execute` return values** are normalized:
+**`execute` parameters & return values**:
+
+`execute` receives `(args, { signal })`, where `signal` is an [`AbortSignal`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal) provided by the browser/agent to handle cancellation if the call is aborted or timed out.
+
+Return values are normalized:
 
 - a **string** → `{ content: [{ type: "text", text }] }`
 - **`undefined`/`null`** (no return) → `{ content: [] }` (success, no payload)
@@ -114,6 +118,6 @@ const { supported, registered, error } = useWebMCP({
 
 ## Tests
 
-[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 21 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s. 
+[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 29 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s. 
 
 Run with `npm install && npm test`.
