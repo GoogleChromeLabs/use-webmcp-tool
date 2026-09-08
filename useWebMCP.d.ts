@@ -13,22 +13,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import type { WebMCP } from "webmcp-types";
 
 export type WebMCPToolResponse = {
   content: Array<{ type: string; text?: string; [key: string]: unknown }>;
   isError?: boolean;
 };
 
-export type ToolAnnotations = {
-  readOnlyHint?: boolean;
-  untrustedContentHint?: boolean;
-};
-
 export type WebMCPOptions<Args, Result> = {
   name: string;
   description: string;
   inputSchema?: object;
-  annotations?: ToolAnnotations;
+  annotations?: WebMCP.ToolAnnotations;
   execute: (args: Args, options: { signal: AbortSignal }) => Result | Promise<Result>;
   enabled?: boolean;
   formatOutput?: (result: Result, args: Args) => unknown;

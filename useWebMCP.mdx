@@ -38,7 +38,7 @@ import StaticCodeContainer from "../../components/StaticCodeContainer.astro";
   | name         | string   | The tool's identifier, e.g. `"add-todo"`. |
   | description  | string   | A natural-language description the agent uses to decide when to call the tool. |
   | inputSchema  | object   | Optional JSON Schema describing the tool's arguments (`type`, `properties`, `required`). |
-  | annotations  | object   | Optional metadata about the tool's behavior (`readOnlyHint`, `untrustedContentHint`). |
+  | annotations  | object   | Optional metadata about the tool's behavior (`readOnlyHint`, `untrustedContentHint`, `consequentialHint`). |
   | execute      | function | `(args, { signal }) => result \| Promise<result>`. Runs your client-side logic and returns a result for the agent. `signal` is an `AbortSignal` to handle cancellation. |
   | enabled      | boolean  | Optional, defaults to `true`. The tool is registered only while `true` — handy for auth-gated or state-dependent tools. |
   | formatOutput | function | Optional `(result, args) => any` to shape the value before it's normalized into a tool response. |

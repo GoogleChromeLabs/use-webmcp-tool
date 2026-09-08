@@ -72,7 +72,11 @@ describe("registration lifecycle", () => {
 
   it("passes annotations through to registerTool", () => {
     const { registerTool } = installFakeModelContext();
-    const annotations = { readOnlyHint: true, untrustedContentHint: false };
+    const annotations = {
+      readOnlyHint: true,
+      untrustedContentHint: false,
+      consequentialHint: false,
+    };
     renderHook(() =>
       useWebMCP({ ...baseOptions, annotations, execute: () => "ok" })
     );
