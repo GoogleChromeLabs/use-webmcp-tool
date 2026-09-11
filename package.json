@@ -1,6 +1,6 @@
 {
   "name": "use-webmcp-tool",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "React hook for registering WebMCP tools (document.modelContext) with lifecycle-managed registration and MCP result normalization.",
   "type": "module",
   "main": "./useWebMCP.js",
