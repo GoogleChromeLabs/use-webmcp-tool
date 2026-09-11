@@ -49,7 +49,7 @@
     "jsdom": "^26.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "vitest": "^3.2.4"
+    "vitest": "^5.0.0"
   },
   "dependencies": {
     "webmcp-types": "^0.1.7"
