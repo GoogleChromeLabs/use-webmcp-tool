@@ -24,7 +24,7 @@ import StaticCodeContainer from "../../components/StaticCodeContainer.astro";
   feature-detects so it's a safe no-op during SSR and in browsers without
   WebMCP (briefly re-checking after mount, since extensions often inject the
   API late), and normalizes whatever you return into a valid tool response —
-  turning anything thrown into an `{ isError: true }` result along the way.
+  turning errors from uncancelled calls into an `{ isError: true }` result along the way.
 </HookDescription>
 
 <div class="reference">
