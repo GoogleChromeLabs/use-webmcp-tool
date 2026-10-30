@@ -132,8 +132,16 @@ export function useWebMCP({
 
     const controller = new AbortController();
 
+    const reportRegistrationError = (error) => {
+      setState({
+        supported: true,
+        registered: false,
+        error: error instanceof Error ? error : new Error(safeStringify(error)),
+      });
+    };
+
     try {
-      document.modelContext.registerTool(
+      const registration = document.modelContext.registerTool(
         {
           name,
           description,
@@ -160,13 +168,13 @@ export function useWebMCP({
       );
 
       setState({ supported: true, registered: true, error: null });
-    } catch (error) {
-      // e.g. NotAllowedError when the `tools` permissions policy is disabled.
-      setState({
-        supported: true,
-        registered: false,
-        error: error instanceof Error ? error : new Error(safeStringify(error)),
+
+      // Ignore rejections from registrations cleaned up by this effect.
+      Promise.resolve(registration).catch((error) => {
+        if (!controller.signal.aborted) reportRegistrationError(error);
       });
+    } catch (error) {
+      reportRegistrationError(error);
     }
 
     // Aborting the signal is how WebMCP unregisters a tool, so this runs on
