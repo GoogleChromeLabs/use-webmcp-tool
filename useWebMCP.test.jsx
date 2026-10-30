@@ -412,6 +412,7 @@ describe("execute options and signal", () => {
   it("allows execute to react to signal abortion", async () => {
     const { tools } = installFakeModelContext();
     const controller = new AbortController();
+    const onError = vi.fn();
 
     const execute = vi.fn(async (args, { signal }) => {
       if (signal.aborted) {
@@ -424,22 +425,19 @@ describe("execute options and signal", () => {
       });
     });
 
-    renderHook(() => useWebMCP({ ...baseOptions, execute }));
+    renderHook(() => useWebMCP({ ...baseOptions, execute, onError }));
 
     const promise = tools
       .get("add-todo")
       .execute({ text: "buy milk" }, { signal: controller.signal });
 
     controller.abort();
-    const response = await promise;
 
-    expect(response).toEqual({
-      content: [{ type: "text", text: "aborted during execution" }],
-      isError: true,
-    });
+    await expect(promise).rejects.toThrow("aborted during execution");
+    expect(onError).not.toHaveBeenCalled();
   });
 
-  it("handles AbortError thrown via signal.throwIfAborted()", async () => {
+  it("rejects with AbortError thrown via signal.throwIfAborted(), without onError", async () => {
     const { tools } = installFakeModelContext();
     const onError = vi.fn();
     const controller = new AbortController();
@@ -452,14 +450,36 @@ describe("execute options and signal", () => {
 
     renderHook(() => useWebMCP({ ...baseOptions, execute, onError }));
 
+    await expect(
+      tools.get("add-todo").execute({}, { signal: controller.signal })
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it.each(["Error", "AbortError"])("reports %s while the signal is not aborted", async (name) => {
+    const { tools } = installFakeModelContext();
+    const onError = vi.fn();
+    const controller = new AbortController();
+
+    renderHook(() =>
+      useWebMCP({
+        ...baseOptions,
+        execute: () => {
+          throw Object.assign(new Error("nope"), { name });
+        },
+        onError,
+      })
+    );
+
     const response = await tools
       .get("add-todo")
       .execute({}, { signal: controller.signal });
 
-    expect(response.isError).toBe(true);
-    expect(response.content[0].text).toMatch(/aborted/i);
+    expect(response).toEqual({
+      content: [{ type: "text", text: "nope" }],
+      isError: true,
+    });
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError.mock.calls[0][0].name).toBe("AbortError");
   });
 
   it("forwards options to the updated execute closure after re-render", async () => {

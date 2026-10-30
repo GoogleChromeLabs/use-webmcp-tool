@@ -112,12 +112,13 @@ Return values are normalized:
 - a value that is **already** `{ content: [...] }` → passed through untouched
 - a **thrown value** — Error or not (`throw "not signed in"`, `throw { code: 403 }` both count) → `{ content: [{ type: "text", text }], isError: true }`, after `onError`. A failure must never read as success to the agent.
 - a **returned `Error`** → treated exactly like a throw: `onError` fires, then an `isError` result
+- a throw or rejection **after `signal` aborts** → rethrown as is, without `onError`: a cancelled call is not a tool error
 - anything else (object/array/number) → JSON-serialized into a text block
 
 ---
 
 ## Tests
 
-[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 29 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s. 
+[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 31 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s.
 
 Run with `npm install && npm test`.
