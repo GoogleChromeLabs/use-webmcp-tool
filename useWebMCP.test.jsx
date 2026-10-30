@@ -63,12 +63,14 @@ afterEach(() => {
 });
 
 describe("registration lifecycle", () => {
-  it("registers on mount and unregisters (via abort) on unmount", () => {
+  it("registers on mount and unregisters (via abort) on unmount", async () => {
     const { tools, registerTool } = installFakeModelContext();
     const { result, unmount } = renderHook(() =>
       useWebMCP({ ...baseOptions, execute: () => "ok" })
     );
 
+    expect(result.current.registered).toBe(false);
+    await waitFor(() => expect(result.current.registered).toBe(true));
     expect(result.current).toEqual({
       supported: true,
       registered: true,
@@ -111,7 +113,7 @@ describe("registration lifecycle", () => {
     });
   });
 
-  it("registers exactly one live tool under StrictMode", () => {
+  it("registers exactly one live tool under StrictMode", async () => {
     const { tools, registerTool } = installFakeModelContext();
     const { result } = renderHook(
       () => useWebMCP({ ...baseOptions, execute: () => "ok" }),
@@ -121,7 +123,7 @@ describe("registration lifecycle", () => {
     // StrictMode mounts twice; the first registration must have been aborted.
     expect(registerTool).toHaveBeenCalledTimes(2);
     expect(tools.size).toBe(1);
-    expect(result.current.registered).toBe(true);
+    await waitFor(() => expect(result.current.registered).toBe(true));
   });
 
   it("does not report the abort of a registration cleaned up before it settles", async () => {
@@ -167,7 +169,7 @@ describe("registration lifecycle", () => {
       expect(second.result.current.error?.name).toBe("InvalidStateError")
     );
     expect(second.result.current.registered).toBe(false);
-    expect(first.result.current.registered).toBe(true);
+    await waitFor(() => expect(first.result.current.registered).toBe(true));
     expect(await tools.get("add-todo").execute({})).toEqual({
       content: [{ type: "text", text: "first" }],
     });
@@ -203,7 +205,7 @@ describe("registration lifecycle", () => {
     expect(result.current).toEqual({ supported: true, registered: true, error: null });
   });
 
-  it("honors the enabled flag, registering only while true", () => {
+  it("honors the enabled flag, registering only while true", async () => {
     const { tools } = installFakeModelContext();
     const { result, rerender } = renderHook(
       ({ enabled }) => useWebMCP({ ...baseOptions, enabled, execute: () => "ok" }),
@@ -218,7 +220,7 @@ describe("registration lifecycle", () => {
     expect(tools.size).toBe(0);
 
     rerender({ enabled: true });
-    expect(result.current.registered).toBe(true);
+    await waitFor(() => expect(result.current.registered).toBe(true));
     expect(tools.size).toBe(1);
 
     rerender({ enabled: false });
@@ -234,8 +236,11 @@ describe("registration lifecycle", () => {
     expect(result.current.supported).toBe(false);
 
     installFakeModelContext();
-    act(() => {
-      vi.advanceTimersByTime(500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
 
     expect(result.current).toEqual({

@@ -132,50 +132,48 @@ export function useWebMCP({
 
     const controller = new AbortController();
 
-    const reportRegistrationError = (error) => {
-      setState({
-        supported: true,
-        registered: false,
-        error: error instanceof Error ? error : new Error(safeStringify(error)),
-      });
-    };
-
-    try {
-      const registration = document.modelContext.registerTool(
-        {
-          name,
-          description,
-          inputSchema,
-          annotations,
-          async execute(args, options) {
-            try {
-              const result = await executeRef.current(args, options);
-              const format = formatOutputRef.current;
-              const shaped = format ? format(result, args) : result;
-              // A returned Error gets the same treatment as a thrown one:
-              // `onError`, then an `isError` result.
-              if (shaped instanceof Error) throw shaped;
-              return toToolResponse(shaped);
-            } catch (error) {
-              if (onErrorRef.current) {
-                onErrorRef.current(error);
+    (async () => {
+      try {
+        await document.modelContext.registerTool(
+          {
+            name,
+            description,
+            inputSchema,
+            annotations,
+            async execute(args, options) {
+              try {
+                const result = await executeRef.current(args, options);
+                const format = formatOutputRef.current;
+                const shaped = format ? format(result, args) : result;
+                // A returned Error gets the same treatment as a thrown one:
+                // `onError`, then an `isError` result.
+                if (shaped instanceof Error) throw shaped;
+                return toToolResponse(shaped);
+              } catch (error) {
+                if (onErrorRef.current) {
+                  onErrorRef.current(error);
+                }
+                return toErrorResponse(error);
               }
-              return toErrorResponse(error);
-            }
+            },
           },
-        },
-        { signal: controller.signal }
-      );
+          { signal: controller.signal }
+        );
 
-      setState({ supported: true, registered: true, error: null });
-
-      // Ignore rejections from registrations cleaned up by this effect.
-      Promise.resolve(registration).catch((error) => {
-        if (!controller.signal.aborted) reportRegistrationError(error);
-      });
-    } catch (error) {
-      reportRegistrationError(error);
-    }
+        if (!controller.signal.aborted) {
+          setState({ supported: true, registered: true, error: null });
+        }
+      } catch (error) {
+        // Ignore rejections from registrations cleaned up by this effect.
+        if (!controller.signal.aborted) {
+          setState({
+            supported: true,
+            registered: false,
+            error: error instanceof Error ? error : new Error(safeStringify(error)),
+          });
+        }
+      }
+    })();
 
     // Aborting the signal is how WebMCP unregisters a tool, so this runs on
     // unmount and before every re-registration.
