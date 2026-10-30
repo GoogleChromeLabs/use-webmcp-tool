@@ -24,7 +24,7 @@ import StaticCodeContainer from "../../components/StaticCodeContainer.astro";
   feature-detects so it's a safe no-op during SSR and in browsers without
   WebMCP (briefly re-checking after mount, since extensions often inject the
   API late), and normalizes whatever you return into a valid tool response —
-  turning anything thrown into an `{ isError: true }` result along the way.
+  turning errors from uncancelled calls into an `{ isError: true }` result along the way.
 </HookDescription>
 
 <div class="reference">
@@ -42,7 +42,7 @@ import StaticCodeContainer from "../../components/StaticCodeContainer.astro";
   | execute      | function | `(args, { signal }) => result \| Promise<result>`. Runs your client-side logic and returns a result for the agent. `signal` is an `AbortSignal` to handle cancellation. |
   | enabled      | boolean  | Optional, defaults to `true`. The tool is registered only while `true` — handy for auth-gated or state-dependent tools. |
   | formatOutput | function | Optional `(result, args) => any` to shape the value before it's normalized into a tool response. |
-  | onError      | function | Optional `(error) => void` side effect invoked when `execute` throws or returns an `Error` (before the error is returned as an `isError` result). |
+  | onError      | function | Optional `(error) => void` side effect invoked when `execute` throws or returns an `Error` (before the error is returned as an `isError` result). Not called once `signal` has aborted: a cancelled call rejects instead. |
   </div>
 
   ### Return Values

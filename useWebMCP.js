@@ -149,6 +149,7 @@ export function useWebMCP({
               if (shaped instanceof Error) throw shaped;
               return toToolResponse(shaped);
             } catch (error) {
+              if (options?.signal?.aborted) throw error;
               if (onErrorRef.current) {
                 onErrorRef.current(error);
               }
