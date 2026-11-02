@@ -19,20 +19,34 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useWebMCP } from "./useWebMCP.js";
 
-// Minimal fake of the provider side of document.modelContext: registerTool +
-// AbortSignal unregistration, mirroring both the explainer and Chrome's
-// extension (whose registerTool matches the explainer).
+// Use Error instances so jsdom preserves the exception name in hook state.
+function domException(message, name) {
+  return Object.assign(new Error(message), { name });
+}
+
+// Track calls separately so the spy does not consume rejected promises.
 function installFakeModelContext() {
   const tools = new Map();
-  const registerTool = vi.fn((tool, options = {}) => {
-    tools.set(tool.name, tool);
-    if (options.signal) {
-      options.signal.addEventListener("abort", () => {
-        if (tools.get(tool.name) === tool) tools.delete(tool.name);
-      });
+  const registerTool = vi.fn();
+  function fakeRegisterTool(tool, options = {}) {
+    registerTool(tool, options);
+    if (tools.has(tool.name)) {
+      return Promise.reject(
+        domException(`Duplicate tool name: ${tool.name}`, "InvalidStateError")
+      );
     }
-  });
-  document.modelContext = { registerTool };
+    tools.set(tool.name, tool);
+    return new Promise((resolve, reject) => {
+      if (options.signal) {
+        options.signal.addEventListener("abort", () => {
+          if (tools.get(tool.name) === tool) tools.delete(tool.name);
+          reject(options.signal.reason);
+        });
+      }
+      setTimeout(resolve, 0);
+    });
+  }
+  document.modelContext = { registerTool: fakeRegisterTool };
   return { tools, registerTool };
 }
 
@@ -49,12 +63,14 @@ afterEach(() => {
 });
 
 describe("registration lifecycle", () => {
-  it("registers on mount and unregisters (via abort) on unmount", () => {
+  it("registers on mount and unregisters (via abort) on unmount", async () => {
     const { tools, registerTool } = installFakeModelContext();
     const { result, unmount } = renderHook(() =>
       useWebMCP({ ...baseOptions, execute: () => "ok" })
     );
 
+    expect(result.current.registered).toBe(false);
+    await waitFor(() => expect(result.current.registered).toBe(true));
     expect(result.current).toEqual({
       supported: true,
       registered: true,
@@ -97,7 +113,7 @@ describe("registration lifecycle", () => {
     });
   });
 
-  it("registers exactly one live tool under StrictMode", () => {
+  it("registers exactly one live tool under StrictMode", async () => {
     const { tools, registerTool } = installFakeModelContext();
     const { result } = renderHook(
       () => useWebMCP({ ...baseOptions, execute: () => "ok" }),
@@ -107,10 +123,89 @@ describe("registration lifecycle", () => {
     // StrictMode mounts twice; the first registration must have been aborted.
     expect(registerTool).toHaveBeenCalledTimes(2);
     expect(tools.size).toBe(1);
-    expect(result.current.registered).toBe(true);
+    await waitFor(() => expect(result.current.registered).toBe(true));
   });
 
-  it("honors the enabled flag, registering only while true", () => {
+  it("does not report the abort of a registration cleaned up before it settles", async () => {
+    const { tools } = installFakeModelContext();
+    const { result } = renderHook(
+      () => useWebMCP({ ...baseOptions, execute: () => "ok" }),
+      { wrapper: React.StrictMode }
+    );
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(tools.size).toBe(1);
+    expect(result.current).toEqual({
+      supported: true,
+      registered: true,
+      error: null,
+    });
+  });
+
+  it("surfaces a rejected registration through error", async () => {
+    const rejection = domException("Disallowed by policy", "NotAllowedError");
+    document.modelContext = {
+      registerTool: () => Promise.reject(rejection),
+    };
+    const { result } = renderHook(() =>
+      useWebMCP({ ...baseOptions, execute: () => "ok" })
+    );
+
+    await waitFor(() => expect(result.current.error).toBe(rejection));
+    expect(result.current.supported).toBe(true);
+    expect(result.current.registered).toBe(false);
+  });
+
+  it("surfaces a duplicate tool name as an error, keeping the first tool", async () => {
+    const { tools } = installFakeModelContext();
+    const first = renderHook(() =>
+      useWebMCP({ ...baseOptions, execute: () => "first" })
+    );
+    const second = renderHook(() =>
+      useWebMCP({ ...baseOptions, execute: () => "second" })
+    );
+
+    await waitFor(() =>
+      expect(second.result.current.error?.name).toBe("InvalidStateError")
+    );
+    expect(second.result.current.registered).toBe(false);
+    await waitFor(() => expect(first.result.current.registered).toBe(true));
+    expect(await tools.get("add-todo").execute({})).toEqual({
+      content: [{ type: "text", text: "first" }],
+    });
+  });
+
+  it("ignores a previous registration's rejection after re-registering", async () => {
+    let rejectFirst;
+    document.modelContext = {
+      registerTool: vi.fn()
+        .mockImplementationOnce(() => new Promise((resolve, reject) => {
+          rejectFirst = reject;
+        }))
+        .mockResolvedValue(undefined),
+    };
+    const { result, rerender } = renderHook(
+      ({ name }) => useWebMCP({ ...baseOptions, name, execute: () => "ok" }),
+      { initialProps: { name: "first" } }
+    );
+
+    rerender({ name: "second" });
+    await act(async () => rejectFirst(new Error("old registration")));
+
+    expect(result.current).toEqual({ supported: true, registered: true, error: null });
+  });
+
+  it("supports registerTool implementations that return nothing", async () => {
+    document.modelContext = { registerTool: () => {} };
+    const { result } = renderHook(() =>
+      useWebMCP({ ...baseOptions, execute: () => "ok" })
+    );
+
+    await act(async () => {});
+    expect(result.current).toEqual({ supported: true, registered: true, error: null });
+  });
+
+  it("honors the enabled flag, registering only while true", async () => {
     const { tools } = installFakeModelContext();
     const { result, rerender } = renderHook(
       ({ enabled }) => useWebMCP({ ...baseOptions, enabled, execute: () => "ok" }),
@@ -125,7 +220,7 @@ describe("registration lifecycle", () => {
     expect(tools.size).toBe(0);
 
     rerender({ enabled: true });
-    expect(result.current.registered).toBe(true);
+    await waitFor(() => expect(result.current.registered).toBe(true));
     expect(tools.size).toBe(1);
 
     rerender({ enabled: false });
@@ -141,8 +236,11 @@ describe("registration lifecycle", () => {
     expect(result.current.supported).toBe(false);
 
     installFakeModelContext();
-    act(() => {
-      vi.advanceTimersByTime(500);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
 
     expect(result.current).toEqual({

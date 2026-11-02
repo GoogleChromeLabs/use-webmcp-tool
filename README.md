@@ -118,6 +118,6 @@ Return values are normalized:
 
 ## Tests
 
-[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 29 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s. 
+[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 34 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s.
 
 Run with `npm install && npm test`.
