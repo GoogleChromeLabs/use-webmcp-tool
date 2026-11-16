@@ -177,9 +177,11 @@ export function useWebMCP({
     })();
 
     // Aborting the signal is how WebMCP unregisters a tool, so this runs on
-    // unmount and before every re-registration.
+    // unmount and before every re-registration. Pass a reason so abort() does
+    // not create the default AbortError, which can surface as an uncaught
+    // rejection when React StrictMode runs this cleanup.
     return () => {
-      controller.abort();
+      controller.abort("effect cleanup");
     };
     // `schemaKey` and `annotationsKey` stand in for `inputSchema` and
     // `annotations` (content comparison, above); `execute`/`formatOutput`/`onError`

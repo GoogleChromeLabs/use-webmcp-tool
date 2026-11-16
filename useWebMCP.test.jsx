@@ -142,6 +142,63 @@ describe("registration lifecycle", () => {
     });
   });
 
+  it("does not leave an uncaught AbortError when StrictMode remounts", async () => {
+    const unhandled = [];
+    const onWindow = (event) => {
+      unhandled.push(event.reason);
+      event.preventDefault();
+    };
+    const onProcess = (reason) => {
+      unhandled.push(reason);
+    };
+    window.addEventListener("unhandledrejection", onWindow);
+    process.on("unhandledRejection", onProcess);
+
+    try {
+      const tools = new Map();
+      document.modelContext = {
+        registerTool(tool, options = {}) {
+          tools.set(tool.name, tool);
+          return new Promise((resolve, reject) => {
+            if (options.signal) {
+              options.signal.addEventListener("abort", () => {
+                if (tools.get(tool.name) === tool) tools.delete(tool.name);
+                const reason = options.signal.reason;
+                reject(reason);
+                // If the registration promise already settled, reject() is a
+                // no-op. abort() with no argument still creates a default
+                // AbortError, and in Chrome that can surface as an uncaught
+                // rejection (issue #19). Re-rejecting a default AbortError
+                // reproduces that host behavior.
+                if (reason && reason.name === "AbortError") {
+                  Promise.reject(reason);
+                }
+              });
+            }
+            queueMicrotask(resolve);
+          });
+        },
+      };
+
+      const { result } = renderHook(
+        () => useWebMCP({ ...baseOptions, execute: () => "ok" }),
+        { wrapper: React.StrictMode }
+      );
+
+      await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(tools.size).toBe(1);
+      expect(result.current).toEqual({
+        supported: true,
+        registered: true,
+        error: null,
+      });
+      expect(unhandled).toEqual([]);
+    } finally {
+      window.removeEventListener("unhandledrejection", onWindow);
+      process.off("unhandledRejection", onProcess);
+    }
+  });
+
   it("surfaces a rejected registration through error", async () => {
     const rejection = domException("Disallowed by policy", "NotAllowedError");
     document.modelContext = {
