@@ -86,6 +86,22 @@ describe("registration lifecycle", () => {
     expect(tools.size).toBe(0);
   });
 
+  it("passes outputSchema through to registerTool", () => {
+    const { registerTool } = installFakeModelContext();
+    const outputSchema = {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    };
+    renderHook(() =>
+      useWebMCP({ ...baseOptions, outputSchema, execute: () => "ok" })
+    );
+
+    expect(registerTool).toHaveBeenCalledTimes(1);
+    const [tool] = registerTool.mock.calls[0];
+    expect(tool.outputSchema).toEqual(outputSchema);
+  });
+
   it("passes annotations through to registerTool", () => {
     const { registerTool } = installFakeModelContext();
     const annotations = {
@@ -311,6 +327,34 @@ describe("re-registration identity", () => {
 
     rerender({ inputSchema: schema() });
     expect(registerTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-register for a new outputSchema object with identical content", () => {
+    const { registerTool } = installFakeModelContext();
+    const schema = () => ({
+      type: "object",
+      properties: { id: { type: "string" } },
+    });
+    const { rerender } = renderHook(
+      ({ outputSchema }) =>
+        useWebMCP({ ...baseOptions, outputSchema, execute: () => "ok" }),
+      { initialProps: { outputSchema: schema() } }
+    );
+
+    rerender({ outputSchema: schema() });
+    expect(registerTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-registers when outputSchema changes", () => {
+    const { registerTool } = installFakeModelContext();
+    const { rerender } = renderHook(
+      ({ outputSchema }) =>
+        useWebMCP({ ...baseOptions, outputSchema, execute: () => "ok" }),
+      { initialProps: { outputSchema: { type: "object" } } }
+    );
+
+    rerender({ outputSchema: { type: "string" } });
+    expect(registerTool).toHaveBeenCalledTimes(2);
   });
 
   it("does not re-register for a new annotations object with identical content", () => {

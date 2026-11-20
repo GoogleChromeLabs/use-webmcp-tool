@@ -24,6 +24,7 @@ export type WebMCPOptions<Args, Result> = {
   name: string;
   description: string;
   inputSchema?: object;
+  outputSchema?: object;
   annotations?: WebMCP.ToolAnnotations;
   execute: (args: Args, options: { signal: AbortSignal }) => Result | Promise<Result>;
   enabled?: boolean;
