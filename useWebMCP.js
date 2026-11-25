@@ -62,6 +62,15 @@ function toErrorResponse(error) {
   return { content: [{ type: "text", text }], isError: true };
 }
 
+// Tells the browser to hold off reading this document's tools until `promise`
+// settles. Readiness is only a hint, so it's skipped where unsupported and its
+// exceptions never break registration.
+function waitForToolsUntil(promise) {
+  try {
+    document.modelContext?.waitForToolsUntil?.(promise);
+  } catch {}
+}
+
 export function useWebMCP({
   name,
   description,
@@ -69,6 +78,7 @@ export function useWebMCP({
   annotations,
   execute,
   enabled = true,
+  pending = false,
   formatOutput,
   onError,
 }) {
@@ -103,6 +113,17 @@ export function useWebMCP({
   // late injection is detected so the registration effect re-runs.
   const [detectTick, redetect] = React.useReducer((n) => n + 1, 0);
 
+  // While `pending` is true (e.g. the data the tool depends on is loading),
+  // keep one readiness promise open so the browser waits for this tool instead
+  // of acting on an incomplete tool set. Settled when `pending` turns false or
+  // the component unmounts.
+  React.useEffect(() => {
+    if (!pending) return;
+    let settle;
+    waitForToolsUntil(new Promise((resolve) => (settle = resolve)));
+    return () => settle();
+  }, [pending, detectTick]);
+
   React.useEffect(() => {
     const supported =
       typeof document !== "undefined" && Boolean(document.modelContext);
@@ -134,7 +155,7 @@ export function useWebMCP({
 
     (async () => {
       try {
-        await document.modelContext.registerTool(
+        const registration = document.modelContext.registerTool(
           {
             name,
             description,
@@ -160,6 +181,9 @@ export function useWebMCP({
           },
           { signal: controller.signal }
         );
+        // The document's tools are not ready until this registration settles.
+        waitForToolsUntil(registration);
+        await registration;
 
         if (!controller.signal.aborted) {
           setState({ supported: true, registered: true, error: null });

@@ -27,6 +27,7 @@ export type WebMCPOptions<Args, Result> = {
   annotations?: WebMCP.ToolAnnotations;
   execute: (args: Args, options: { signal: AbortSignal }) => Result | Promise<Result>;
   enabled?: boolean;
+  pending?: boolean;
   formatOutput?: (result: Result, args: Args) => unknown;
   onError?: (error: unknown) => void;
 };
