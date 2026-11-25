@@ -89,6 +89,7 @@ const { supported, registered, error } = useWebMCP({
   annotations,    // WebMCP.ToolAnnotations object with readOnlyHint/untrustedContentHint/consequentialHint (optional)
   execute,        // (args, { signal }) => result | Promise<result> (required)
   enabled = true, // boolean — register only while true
+  pending = false, // boolean — while true, tell the browser the tools aren't ready yet
   formatOutput,   // (result, args) => any — optional shaper before MCP normalization
   onError,        // (error) => void — optional side-effect when execute throws
 });
@@ -116,10 +117,29 @@ Return values are normalized:
 - a throw or rejection **after `signal` aborts** → rethrown as is, without `onError`: a cancelled call is not a tool error
 - anything else (object/array/number) → JSON-serialized into a text block
 
+**Tool readiness (`pending`)**:
+
+Where the browser supports `document.modelContext.waitForToolsUntil()`, the hook uses it to tell the browser when the page's tools aren't ready yet, so the agent doesn't act on an incomplete set:
+
+- each registration counts as "not ready" until `registerTool()` settles (automatic)
+- while `pending` is `true`, the hook keeps tools "not ready", e.g. while the page is still loading. Releases when `pending` turns `false` or the component unmounts. The browser also gives up waiting after its own timeout.
+
+```jsx
+const { isLoading } = useCatalog();
+useWebMCP({
+  name: "search-products",
+  description: "Search the product catalog",
+  pending: isLoading,
+  execute: ({ query }) => searchProducts(query),
+});
+```
+
+Where `waitForToolsUntil` isn't available, this does nothing. Its exceptions are ignored, since readiness is only a hint.
+
 ---
 
 ## Tests
 
-[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 36 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s.
+[`useWebMCP.test.jsx`](./useWebMCP.test.jsx) (vitest + jsdom + `@testing-library/react`, 42 tests) covers the registration lifecycle (mount/unmount, StrictMode, `enabled`, late injection, registration errors), re-registration identity (execute changes don't churn, content-equal schemas don't churn, name changes do), tool readiness (`waitForToolsUntil` for registrations and `pending`, feature detection, ignored exceptions), options and cancellation signals (`execute(args, { signal })`), and the full result/error normalization matrix including thrown non-Errors and returned `Error`s.
 
 Run with `npm install && npm test`.

@@ -52,6 +52,6 @@
     "vitest": "^5.0.0"
   },
   "dependencies": {
-    "webmcp-types": "^0.1.7"
+    "webmcp-types": "https://codeload.github.com/webmachinelearning/webmcp-types/tar.gz/cceaa1585920089265c6fd9e084e824dc71fcaa3"
   }
 }

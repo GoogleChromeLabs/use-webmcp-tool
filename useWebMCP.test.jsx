@@ -396,6 +396,105 @@ describe("re-registration identity", () => {
   });
 });
 
+describe("tool readiness (waitForToolsUntil)", () => {
+  // Tracks each readiness promise passed to waitForToolsUntil and whether it
+  // has settled, mirroring the spec's pending tool readiness promises.
+  function installReadinessTracking() {
+    const fake = installFakeModelContext();
+    const promises = [];
+    const settled = new Set();
+    document.modelContext.waitForToolsUntil = vi.fn((promise) => {
+      promises.push(promise);
+      const done = () => settled.add(promise);
+      promise.then(done, done);
+    });
+    const pendingCount = () =>
+      promises.filter((promise) => !settled.has(promise)).length;
+    return { ...fake, promises, pendingCount };
+  }
+
+  it("signals each registration until it settles", async () => {
+    const { promises, pendingCount } = installReadinessTracking();
+    const { result } = renderHook(() =>
+      useWebMCP({ ...baseOptions, execute: () => "ok" })
+    );
+
+    expect(promises).toHaveLength(1);
+    expect(pendingCount()).toBe(1);
+    await waitFor(() => expect(result.current.registered).toBe(true));
+    expect(pendingCount()).toBe(0);
+  });
+
+  it("holds readiness open while pending, settling when it turns false", async () => {
+    const { pendingCount } = installReadinessTracking();
+    const { result, rerender } = renderHook(
+      ({ pending }) =>
+        useWebMCP({ ...baseOptions, enabled: !pending, pending, execute: () => "ok" }),
+      { initialProps: { pending: true } }
+    );
+
+    await act(async () => {});
+    expect(result.current.registered).toBe(false);
+    expect(pendingCount()).toBe(1);
+
+    rerender({ pending: false });
+    await waitFor(() => expect(result.current.registered).toBe(true));
+    expect(pendingCount()).toBe(0);
+  });
+
+  it("keeps holding readiness while pending after the tool registered", async () => {
+    const { promises, pendingCount } = installReadinessTracking();
+    const { result, rerender } = renderHook(
+      ({ pending }) => useWebMCP({ ...baseOptions, pending, execute: () => "ok" }),
+      { initialProps: { pending: true } }
+    );
+
+    expect(promises).toHaveLength(2);
+    await waitFor(() => expect(result.current.registered).toBe(true));
+    expect(pendingCount()).toBe(1);
+
+    rerender({ pending: false });
+    await act(async () => {});
+    expect(pendingCount()).toBe(0);
+    expect(result.current.registered).toBe(true);
+  });
+
+  it("settles a pending readiness promise on unmount", async () => {
+    const { pendingCount } = installReadinessTracking();
+    const { unmount } = renderHook(() =>
+      useWebMCP({ ...baseOptions, enabled: false, pending: true, execute: () => "ok" })
+    );
+
+    expect(pendingCount()).toBe(1);
+    unmount();
+    await act(async () => {});
+    expect(pendingCount()).toBe(0);
+  });
+
+  it("registers normally when waitForToolsUntil is not implemented", async () => {
+    installFakeModelContext();
+    const { result } = renderHook(() =>
+      useWebMCP({ ...baseOptions, pending: true, execute: () => "ok" })
+    );
+
+    await waitFor(() => expect(result.current.registered).toBe(true));
+  });
+
+  it("ignores waitForToolsUntil throwing, without surfacing an error", async () => {
+    installFakeModelContext();
+    document.modelContext.waitForToolsUntil = () => {
+      throw domException("Document is not fully active", "InvalidStateError");
+    };
+    const { result } = renderHook(() =>
+      useWebMCP({ ...baseOptions, pending: true, execute: () => "ok" })
+    );
+
+    await waitFor(() =>
+      expect(result.current).toEqual({ supported: true, registered: true, error: null })
+    );
+  });
+});
+
 describe("result normalization", () => {
   async function executeWith(hookOptions, args = {}) {
     const { tools } = installFakeModelContext();
